@@ -1,68 +1,86 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-import pandas as pd
-import time
+import asyncio
 import re
+import pandas as pd
 import os
+from playwright.async_api import async_playwright
 
 os.makedirs('data', exist_ok=True)
 
-options = Options()
-options.add_argument('--headless')
-driver = webdriver.Chrome(options=options)
 
-url = "https://www.drom.ru/catalog/all/"
-driver.get(url)
+async def parse_drom_ru():
+    cars = []
 
-time.sleep(5)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = await context.new_page()
 
-cars = []
-brands = driver.find_elements(By.CSS_SELECTOR, '[data-ftid="component_brand"]')
+        url = "https://www.drom.ru/catalog/all/"
+        await page.goto(url)
+        await page.wait_for_timeout(5000)
 
-for brand in brands[:10]:
-    try:
-        brand_name = brand.text
-        brand.click()
-        time.sleep(2)
+        brands = await page.query_selector_all('[data-ftid="component_brand"]')
 
-        models = driver.find_elements(By.CSS_SELECTOR, '[data-ftid="component_model"]')
-        for model in models[:5]:
+        for brand in brands[:5]:
             try:
-                model_name = model.text
-                model.click()
-                time.sleep(2)
+                brand_name = await brand.inner_text()
+                await brand.click()
+                await page.wait_for_timeout(2000)
 
-                listings = driver.find_elements(By.CSS_SELECTOR, '[data-ftid="bull_list_item"]')
-                for listing in listings[:3]:
+                models = await page.query_selector_all('[data-ftid="component_model"]')
+                for model in models[:3]:
                     try:
-                        price_elem = listing.find_element(By.CSS_SELECTOR, '[data-ftid="bull_price"]')
-                        price = re.sub(r'[^\d]', '', price_elem.text)
+                        model_name = await model.inner_text()
+                        await model.click()
+                        await page.wait_for_timeout(2000)
 
-                        specs = listing.find_elements(By.CSS_SELECTOR, '[data-ftid="bull_specs"]')
-                        specs_text = specs[0].text if specs else ''
+                        listings = await page.query_selector_all('[data-ftid="bull_list_item"]')
+                        for listing in listings[:3]:
+                            try:
+                                price_elem = await listing.query_selector('[data-ftid="bull_price"]')
+                                price_text = await price_elem.inner_text() if price_elem else ''
+                                price = re.sub(r'[^\d]', '', price_text)
 
-                        cars.append({
-                            'brand': brand_name,
-                            'model': model_name,
-                            'price_rub': int(price) if price else None,
-                            'specs': specs_text
-                        })
-                    except:
+                                specs_elem = await listing.query_selector('[data-ftid="bull_specs"]')
+                                specs_text = await specs_elem.inner_text() if specs_elem else ''
+
+                                engine = re.search(r'(\d+\.?\d*)\s*л', specs_text)
+                                power = re.search(r'(\d+)\s*л\.с', specs_text)
+
+                                cars.append({
+                                    'brand': brand_name,
+                                    'model': model_name,
+                                    'price_rub': int(price) if price else None,
+                                    'engine_volume_l': float(engine.group(1)) if engine else None,
+                                    'power_hp': int(power.group(1)) if power else None,
+                                    'specs': specs_text[:200]
+                                })
+                            except Exception:
+                                pass
+
+                        await page.go_back()
+                        await page.wait_for_timeout(1500)
+                    except Exception:
                         pass
 
-                driver.back()
-                time.sleep(1)
-            except:
+                await page.goto(url)
+                await page.wait_for_timeout(2000)
+            except Exception:
                 pass
 
-        driver.get(url)
-        time.sleep(2)
-    except:
-        pass
+        await browser.close()
 
-driver.quit()
+    return pd.DataFrame(cars)
 
-df = pd.DataFrame(cars)
-df.to_csv('data/drom_cars.csv', index=False)
-print(f"Сохранено {len(df)} записей автомобилей")
+
+async def main():
+    df = await parse_drom_ru()
+    df.to_csv('data/drom_cars.csv', index=False)
+    print(f"Сохранено {len(df)} записей с Drom.ru")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

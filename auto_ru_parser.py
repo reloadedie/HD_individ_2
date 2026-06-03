@@ -1,56 +1,76 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
+import asyncio
+import re
 import pandas as pd
-import time
 import os
+from playwright.async_api import async_playwright
 
 os.makedirs('data', exist_ok=True)
 
-options = Options()
-options.add_argument('--headless')
-driver = webdriver.Chrome(options=options)
 
-url = "https://auto.ru/cars/new/all/"
-driver.get(url)
+async def parse_auto_ru():
+    cars = []
 
-time.sleep(5)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = await context.new_page()
 
-cars = []
-last_height = driver.execute_script("return document.body.scrollHeight")
-while len(cars) < 200:
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(2)
-    new_height = driver.execute_script("return document.body.scrollHeight")
-    if new_height == last_height:
-        break
-    last_height = new_height
+        url = "https://auto.ru/cars/new/all/"
+        await page.goto(url)
+        await page.wait_for_timeout(5000)
 
-    cards = driver.find_elements(By.CLASS_NAME, 'ListingItem')
-    for card in cards:
-        try:
-            name = card.find_element(By.CLASS_NAME, 'ListingItemTitle').text
-            price = card.find_element(By.CLASS_NAME, 'ListingItemPrice').text
-            price = re.sub(r'[^\d]', '', price)
+        # Скроллим для загрузки
+        for _ in range(5):
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(2000)
 
-            tech = card.find_elements(By.CLASS_NAME, 'ListingItemTechSummary')
-            tech_text = tech[0].text if tech else ''
+        # Ищем карточки
+        cards = await page.query_selector_all('.ListingItem')
 
-            engine = re.search(r'(\d+\.?\d*)\s*л', tech_text)
-            power = re.search(r'(\d+)\s*л\.с', tech_text)
+        for card in cards:
+            try:
+                # Название
+                name_elem = await card.query_selector('.ListingItemTitle')
+                name = await name_elem.inner_text() if name_elem else ''
 
-            cars.append({
-                'name': name,
-                'price_rub': int(price) if price else None,
-                'engine_volume_l': float(engine.group(1)) if engine else None,
-                'power_hp': int(power.group(1)) if power else None,
-                'full_text': tech_text
-            })
-        except:
-            pass
+                # Цена
+                price_elem = await card.query_selector('.ListingItemPrice')
+                price_text = await price_elem.inner_text() if price_elem else ''
+                price = re.sub(r'[^\d]', '', price_text)
 
-driver.quit()
+                # Характеристики
+                tech_elem = await card.query_selector('.ListingItemTechSummary')
+                tech_text = await tech_elem.inner_text() if tech_elem else ''
 
-df = pd.DataFrame(cars)
-df.to_csv('data/auto_ru_cars.csv', index=False)
-print(f"Сохранено {len(df)} записей автомобилей")
+                engine = re.search(r'(\d+\.?\d*)\s*л', tech_text)
+                power = re.search(r'(\d+)\s*л\.с', tech_text)
+
+                brand = name.split()[0] if name else ''
+
+                cars.append({
+                    'brand': brand,
+                    'full_name': name,
+                    'price_rub': int(price) if price else None,
+                    'engine_volume_l': float(engine.group(1)) if engine else None,
+                    'power_hp': int(power.group(1)) if power else None,
+                    'specs': tech_text
+                })
+            except Exception as e:
+                continue
+
+        await browser.close()
+
+    return pd.DataFrame(cars)
+
+
+async def main():
+    df = await parse_auto_ru()
+    df.to_csv('data/auto_ru_cars.csv', index=False)
+    print(f"Сохранено {len(df)} записей с Auto.ru")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
