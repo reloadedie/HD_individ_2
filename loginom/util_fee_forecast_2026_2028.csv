@@ -1,0 +1,17 @@
+year,engine_category,util_fee_rub,indexation_coefficient,change_pct,source
+2025,0-2.0,667440,1.0,0,forecast_based_on_2024_indexation_trend
+2025,2.0-3.0,1875600,1.0,0,forecast_based_on_2024_indexation_trend
+2025,3.0-3.5,2153400,1.0,0,forecast_based_on_2024_indexation_trend
+2025,3.5+,2742300,1.0,0,forecast_based_on_2024_indexation_trend
+2026,0-2.0,767555,1.15,14,forecast_based_on_2024_indexation_trend
+2026,2.0-3.0,2156940,1.15,14,forecast_based_on_2024_indexation_trend
+2026,3.0-3.5,2476410,1.15,14,forecast_based_on_2024_indexation_trend
+2026,3.5+,3153644,1.15,14,forecast_based_on_2024_indexation_trend
+2027,0-2.0,881020,1.32,32,forecast_based_on_2024_indexation_trend
+2027,2.0-3.0,2475792,1.32,32,forecast_based_on_2024_indexation_trend
+2027,3.0-3.5,2842488,1.32,32,forecast_based_on_2024_indexation_trend
+2027,3.5+,3619836,1.32,32,forecast_based_on_2024_indexation_trend
+2028,0-2.0,1014508,1.52,52,forecast_based_on_2024_indexation_trend
+2028,2.0-3.0,2850912,1.52,52,forecast_based_on_2024_indexation_trend
+2028,3.0-3.5,3273168,1.52,52,forecast_based_on_2024_indexation_trend
+2028,3.5+,4168296,1.52,52,forecast_based_on_2024_indexation_trend
